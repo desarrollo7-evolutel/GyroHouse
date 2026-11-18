@@ -2,87 +2,193 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Recorrido virtual 360°</title>
 
-  <!-- Pannellum: visor 360 ligero, sin dependencias -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
   <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
 
   <style>
-    html, body { margin: 0; height: 100%; background: #111; overflow: hidden;
-                 font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    :root {
+      --glass: rgba(18, 20, 26, .55);
+      --glass-fuerte: rgba(18, 20, 26, .78);
+      --borde: rgba(255, 255, 255, .16);
+      --texto: #fff;
+      --tenue: rgba(255, 255, 255, .72);
+      --blur: blur(16px) saturate(150%);
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; background: #0b0d11; overflow: hidden; color: var(--texto);
+                 font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    button, select { font-family: inherit; }
     #panorama { position: fixed; inset: 0; }
 
-    /* Ocultamos el botón de orientación de Pannellum: usamos el nuestro */
-    .pnlm-orientation-button { display: none !important; }
+    /* Ocultamos los controles y el título por defecto de Pannellum */
+    .pnlm-panorama-info, .pnlm-controls-container, .pnlm-orientation-button { display: none !important; }
 
-    /* Pantalla de inicio (necesaria para pedir permiso de movimiento en iPhone) */
-    #inicio { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
-              align-items: center; justify-content: center; gap: 16px; padding: 24px;
-              background: radial-gradient(circle at center, #1f2a38, #0b0f14); color: #fff; text-align: center; }
-    #inicio h1 { margin: 0; font-size: 22px; }
-    #inicio p  { margin: 0; opacity: .75; font-size: 14px; max-width: 320px; }
-    .btn { border: 0; border-radius: 999px; padding: 14px 26px; font-size: 16px; font-weight: 600;
-           background: #2f80ed; color: #fff; cursor: pointer; }
-    .btn:active { transform: scale(.97); }
+    .vidrio { background: var(--glass); border: 1px solid var(--borde);
+              backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+              box-shadow: 0 8px 30px rgba(0,0,0,.35); }
 
-    /* Barra inferior: habitaciones + botón de movimiento */
-    #barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px;
-             display: none; flex-direction: column; gap: 10px; align-items: center;
-             background: linear-gradient(transparent, rgba(0,0,0,.65)); }
-    #habitaciones { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
-    .chip { flex: 0 0 auto; border: 1px solid rgba(255,255,255,.5); background: rgba(0,0,0,.35);
-            color: #fff; border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
-    .chip.activa { background: #fff; color: #111; border-color: #fff; }
-    #btn-movimiento { padding: 10px 18px; font-size: 14px; background: rgba(255,255,255,.15);
-                      border: 1px solid rgba(255,255,255,.5); }
-    #btn-movimiento.on { background: #27ae60; border-color: #27ae60; }
+    /* ---------- Pantalla de inicio ---------- */
+    #inicio { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; gap: 14px; padding: 24px; text-align: center;
+              background: radial-gradient(120% 80% at 50% 0%, #26303f 0%, #0b0d11 70%); }
+    #inicio .icono-grande { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; margin-bottom: 6px; }
+    #inicio h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+    #inicio p  { margin: 0 0 8px; color: var(--tenue); font-size: 14px; line-height: 1.5; max-width: 300px; }
+    .btn-principal { border: 0; border-radius: 999px; padding: 14px 28px; font-size: 15px; font-weight: 600;
+                     background: #fff; color: #111; cursor: pointer; transition: transform .15s, opacity .15s; }
+    .btn-principal:active { transform: scale(.97); }
+    .btn-principal:disabled { opacity: .5; }
 
-    #aviso { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 30;
-             background: rgba(0,0,0,.8); color: #fff; padding: 10px 16px; border-radius: 10px;
-             font-size: 14px; display: none; max-width: 90%; text-align: center; }
+    /* ---------- Dock inferior ---------- */
+    #dock { position: fixed; z-index: 10; left: 50%; transform: translateX(-50%);
+            bottom: calc(16px + env(safe-area-inset-bottom)); max-width: calc(100% - 24px);
+            display: none; align-items: center; gap: 6px; padding: 6px; border-radius: 999px; }
+    #habitaciones { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+    #habitaciones::-webkit-scrollbar { display: none; }
+    .chip { flex: 0 0 auto; border: 0; background: transparent; color: var(--tenue); cursor: pointer;
+            padding: 10px 16px; border-radius: 999px; font-size: 14px; font-weight: 500; white-space: nowrap;
+            transition: background .2s, color .2s; }
+    .chip:hover { color: #fff; }
+    .chip.activa { background: #fff; color: #111; }
+    .separador { width: 1px; height: 24px; background: var(--borde); flex: 0 0 auto; }
+
+    .btn-icono { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+                 display: grid; place-items: center; background: rgba(255,255,255,.08); color: #fff;
+                 transition: background .2s, color .2s; }
+    .btn-icono.on { background: #fff; color: #111; }
+
+    #btn-pantalla { position: fixed; z-index: 10; top: calc(14px + env(safe-area-inset-top)); right: 14px; display: none; }
+
+    /* ---------- Flechas (hotspots) ---------- */
+    .hs-flecha { width: 52px; height: 52px; cursor: pointer; }
+    .hs-circulo { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; color: #fff;
+                  background: rgba(255,255,255,.18); border: 2px solid rgba(255,255,255,.9);
+                  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+                  animation: pulso 2.2s infinite; transition: transform .2s; }
+    .hs-flecha:hover .hs-circulo { transform: scale(1.08); }
+    .hs-texto { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); white-space: nowrap;
+                padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500;
+                background: var(--glass-fuerte); pointer-events: none; }
+    @keyframes pulso {
+      0%   { box-shadow: 0 0 0 0 rgba(255,255,255,.45); }
+      70%  { box-shadow: 0 0 0 16px rgba(255,255,255,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+    }
+    .hs-temporal { width: 22px; height: 22px; border-radius: 50%; background: #fff;
+                   border: 4px solid rgba(0,0,0,.35); animation: pulso 1.2s infinite; }
+
+    /* ---------- Modo editor ---------- */
+    #editor { position: fixed; z-index: 20; top: calc(12px + env(safe-area-inset-top)); left: 12px;
+              width: 320px; max-width: calc(100% - 24px); max-height: calc(100% - 120px); overflow-y: auto;
+              border-radius: 18px; padding: 16px; display: none; font-size: 14px; }
+    #editor h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+    #editor .sub { color: var(--tenue); font-size: 13px; margin: 0 0 12px; line-height: 1.45; }
+    #editor .caja { background: rgba(255,255,255,.07); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    #editor label { display: block; color: var(--tenue); font-size: 12px; margin-bottom: 6px; }
+    #editor select { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--borde);
+                     background: rgba(0,0,0,.35); color: #fff; font-size: 14px; margin-bottom: 10px; }
+    #editor .fila { display: flex; gap: 8px; }
+    .btn-sec { flex: 1; border: 1px solid var(--borde); background: rgba(255,255,255,.08); color: #fff;
+               padding: 10px 12px; border-radius: 10px; font-size: 13px; font-weight: 500; cursor: pointer; }
+    .btn-sec.blanco { background: #fff; color: #111; border-color: #fff; }
+    #ed-lista { list-style: none; margin: 0 0 12px; padding: 0; }
+    #ed-lista li { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+                   padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); margin-bottom: 6px; }
+    #ed-lista small { color: var(--tenue); }
+    #ed-lista button { border: 0; background: transparent; color: var(--tenue); cursor: pointer; font-size: 16px; }
+    #ed-lista .vacio { color: var(--tenue); background: transparent; padding: 0; }
+
+    /* ---------- Avisos ---------- */
+    #aviso { position: fixed; z-index: 50; top: calc(16px + env(safe-area-inset-top)); left: 50%;
+             transform: translateX(-50%); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+             display: none; max-width: 90%; text-align: center; }
   </style>
 </head>
 <body>
   <div id="panorama"></div>
 
+  <!-- Pantalla de inicio -->
   <div id="inicio">
+    <div class="icono-grande vidrio">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/><path d="M3.5 9a8 8 0 0 0 0 6"/><path d="M20.5 9a8 8 0 0 1 0 6"/></svg>
+    </div>
     <h1 id="inicio-titulo">Recorrido virtual</h1>
-    <p>Mueve tu celular para mirar alrededor. Toca las flechas para pasar de una habitación a otra.</p>
-    <button class="btn" id="btn-entrar">Entrar al recorrido</button>
+    <p>Mueve tu celular para mirar alrededor y toca las flechas para pasar de un espacio a otro.</p>
+    <button class="btn-principal" id="btn-entrar">Entrar al recorrido</button>
   </div>
 
-  <div id="barra">
+  <!-- Dock inferior -->
+  <div id="dock" class="vidrio">
     <div id="habitaciones"></div>
-    <button class="btn" id="btn-movimiento">📱 Movimiento: apagado</button>
+    <div class="separador" id="sep-mov"></div>
+    <button class="btn-icono" id="btn-movimiento" title="Movimiento del celular" aria-label="Movimiento del celular">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/><path d="M3.5 9a8 8 0 0 0 0 6"/><path d="M20.5 9a8 8 0 0 1 0 6"/></svg>
+    </button>
   </div>
 
-  <div id="aviso"></div>
+  <button class="btn-icono vidrio" id="btn-pantalla" title="Pantalla completa" aria-label="Pantalla completa">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+  </button>
+
+  <!-- Panel del modo editor (index.html?editor) -->
+  <div id="editor" class="vidrio">
+    <h2>Editor · <span id="ed-hab"></span></h2>
+    <p class="sub" id="ed-ayuda">Gira la vista hasta la puerta y <b>toca la imagen</b> donde quieras poner la flecha.</p>
+
+    <div class="caja" id="ed-nuevo" hidden>
+      <label for="ed-destino">Esta flecha lleva a:</label>
+      <select id="ed-destino"></select>
+      <div class="fila">
+        <button class="btn-sec" id="ed-cancelar">Cancelar</button>
+        <button class="btn-sec blanco" id="ed-agregar">Agregar flecha</button>
+      </div>
+    </div>
+
+    <label>Flechas en este espacio</label>
+    <ul id="ed-lista"></ul>
+
+    <div class="fila" style="margin-bottom:8px">
+      <button class="btn-sec" id="ed-vista">Usar esta vista al entrar</button>
+    </div>
+    <div class="fila">
+      <button class="btn-sec" id="ed-copiar">Copiar JSON</button>
+      <button class="btn-sec blanco" id="ed-descargar">Descargar</button>
+    </div>
+  </div>
+
+  <div id="aviso" class="vidrio"></div>
 
   <script>
     // ---------------------------------------------------------------
-    // Configuración: el tour se lee de un JSON.
-    //   index.html?tour=tour.json   (por defecto)
-    //   index.html?tour=https://api.inmobiliaria.com/tours/123.json
-    //   Agrega &debug para ver pitch/yaw en la consola al tocar la imagen
-    //   (sirve para colocar las flechas).
+    //  index.html                 → recorrido normal
+    //  index.html?editor          → modo editor para colocar flechas
+    //  index.html?tour=URL.json   → cargar otro tour (ej. desde la API)
     // ---------------------------------------------------------------
-    const params   = new URLSearchParams(location.search);
-    const tourUrl  = params.get('tour') || 'tour.json';
-    const modoDebug = params.has('debug');
+    const params     = new URLSearchParams(location.search);
+    const tourUrl    = params.get('tour') || 'tour.json';
+    const modoEditor = params.has('editor');
 
     const esMovil = window.matchMedia('(pointer: coarse)').matches;
     const necesitaPermisoIOS = typeof DeviceOrientationEvent !== 'undefined'
                             && typeof DeviceOrientationEvent.requestPermission === 'function';
 
+    const ICONO_FLECHA = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+
     let tour = null;
     let viewer = null;
     let movimientoPermitido = false;
+    let escenaActual = null;
+    let puntoTemporal = null;
+    let contadorHs = 0;
 
     const $ = id => document.getElementById(id);
+    const habitacion = id => tour.habitaciones.find(h => h.id === id);
+    const nombreDe = id => (habitacion(id) || {}).nombre || id;
 
-    function aviso(texto, ms = 3500) {
+    function aviso(texto, ms = 3000) {
       const el = $('aviso');
       el.textContent = texto;
       el.style.display = 'block';
@@ -90,12 +196,14 @@
       aviso._t = setTimeout(() => el.style.display = 'none', ms);
     }
 
-    // 1) Cargar el JSON del tour
+    // ---------- 1) Cargar el tour ----------
     fetch(tourUrl)
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(datos => {
         tour = datos;
+        tour.habitaciones.forEach(h => h.conexiones = h.conexiones || []);
         $('inicio-titulo').textContent = tour.propiedad || 'Recorrido virtual';
+        if (modoEditor) { $('inicio').style.display = 'none'; crearVisor(); }
       })
       .catch(err => {
         $('btn-entrar').disabled = true;
@@ -103,63 +211,68 @@
         console.error('Error cargando tour:', err);
       });
 
-    // 2) Al tocar "Entrar": pedir permiso (iPhone) y crear el visor.
-    //    El permiso de iOS SOLO se puede pedir dentro de un toque del usuario.
+    // ---------- 2) Entrar (pide permiso de movimiento en iPhone) ----------
     $('btn-entrar').addEventListener('click', async () => {
       if (!tour) return;
-
       if (esMovil) {
         if (!window.isSecureContext) {
-          aviso('El movimiento del celular requiere HTTPS. Puedes arrastrar con el dedo.', 5000);
+          aviso('El movimiento requiere HTTPS. Puedes arrastrar con el dedo.', 5000);
         } else if (necesitaPermisoIOS) {
           try {
-            const r = await DeviceOrientationEvent.requestPermission();
-            movimientoPermitido = (r === 'granted');
+            movimientoPermitido = (await DeviceOrientationEvent.requestPermission()) === 'granted';
             if (!movimientoPermitido) aviso('Sin permiso de movimiento. Puedes arrastrar con el dedo.');
-          } catch (e) {
-            aviso('No se pudo pedir el permiso de movimiento.');
-          }
+          } catch (e) { aviso('No se pudo pedir el permiso de movimiento.'); }
         } else {
-          movimientoPermitido = true; // Android: no pide permiso
+          movimientoPermitido = true;
         }
       }
-
       $('inicio').style.display = 'none';
       crearVisor();
     });
 
-    // 3) Construir el visor a partir del JSON
-    function crearVisor() {
-      const nombres = Object.fromEntries(tour.habitaciones.map(h => [h.id, h.nombre]));
-      const scenes = {};
+    // ---------- 3) Flechas ----------
+    function crearHotspot(conexion) {
+      if (!conexion._hsId) conexion._hsId = 'hs' + (++contadorHs);
+      return {
+        id: conexion._hsId,
+        type: 'scene',
+        sceneId: conexion.destino,
+        pitch: conexion.pitch ?? -10,
+        yaw: conexion.yaw ?? 0,
+        cssClass: 'hs-flecha',
+        createTooltipFunc: pintarFlecha,
+        createTooltipArgs: conexion.texto || nombreDe(conexion.destino)
+      };
+    }
 
+    function pintarFlecha(div, texto) {
+      div.innerHTML = '<div class="hs-circulo">' + ICONO_FLECHA + '</div><span class="hs-texto vidrio"></span>';
+      div.querySelector('.hs-texto').textContent = texto;
+    }
+
+    // ---------- 4) Visor ----------
+    function crearVisor() {
+      const scenes = {};
       for (const h of tour.habitaciones) {
         scenes[h.id] = {
-          title: h.nombre,
           type: 'equirectangular',
           panorama: h.imagen,
           yaw: h.yawInicial || 0,
-          pitch: 0,
+          pitch: h.pitchInicial || 0,
           hfov: 100,
-          hotSpots: (h.conexiones || []).map(c => ({
-            type: 'scene',
-            sceneId: c.destino,
-            text: c.texto || ('Ir a ' + (nombres[c.destino] || c.destino)),
-            pitch: c.pitch ?? -10,
-            yaw: c.yaw ?? 0
-          }))
+          hotSpots: h.conexiones.map(crearHotspot)
         };
       }
+      escenaActual = tour.inicio || tour.habitaciones[0].id;
 
       viewer = pannellum.viewer('panorama', {
         default: {
-          firstScene: tour.inicio || tour.habitaciones[0].id,
-          sceneFadeDuration: 800,
+          firstScene: escenaActual,
+          sceneFadeDuration: 700,
           autoLoad: true,
-          showZoomCtrl: !esMovil,
+          showControls: false,
           compass: false,
-          orientationOnByDefault: esMovil && movimientoPermitido,
-          hotSpotDebug: modoDebug
+          orientationOnByDefault: esMovil && movimientoPermitido && !modoEditor
         },
         scenes,
         strings: {
@@ -175,16 +288,27 @@
         }
       });
 
-      viewer.on('scenechange', marcarHabitacion);
+      viewer.on('scenechange', id => {
+        escenaActual = id;
+        marcarChip(id);
+        if (modoEditor) { quitarPuntoTemporal(); pintarEditor(); }
+      });
       viewer.on('error', msg => aviso(msg, 6000));
 
-      pintarBarra();
-      marcarHabitacion(tour.inicio || tour.habitaciones[0].id);
-      $('barra').style.display = 'flex';
+      pintarDock();
+      marcarChip(escenaActual);
+      $('dock').style.display = 'flex';
+
+      if (document.fullscreenEnabled || document.webkitFullscreenEnabled) {
+        $('btn-pantalla').style.display = 'grid';
+        $('btn-pantalla').onclick = () => viewer.toggleFullscreen();
+      }
+
+      if (modoEditor) iniciarEditor();
     }
 
-    // 4) Barra inferior
-    function pintarBarra() {
+    // ---------- 5) Dock ----------
+    function pintarDock() {
       const cont = $('habitaciones');
       cont.innerHTML = '';
       for (const h of tour.habitaciones) {
@@ -192,14 +316,16 @@
         b.className = 'chip';
         b.dataset.id = h.id;
         b.textContent = h.nombre;
-        b.onclick = () => viewer.loadScene(h.id);
+        b.onclick = () => { if (h.id !== escenaActual) viewer.loadScene(h.id); };
         cont.appendChild(b);
       }
 
       const btn = $('btn-movimiento');
-      if (!esMovil || !movimientoPermitido) { btn.style.display = 'none'; return; }
-
-      // El estado real se revisa un momento después de cargar
+      if (!esMovil || !movimientoPermitido || modoEditor) {
+        btn.style.display = 'none';
+        $('sep-mov').style.display = 'none';
+        return;
+      }
       setTimeout(actualizarBotonMovimiento, 1500);
       btn.onclick = () => {
         if (viewer.isOrientationActive()) viewer.stopOrientation();
@@ -209,15 +335,122 @@
     }
 
     function actualizarBotonMovimiento() {
-      const btn = $('btn-movimiento');
-      const on = viewer && viewer.isOrientationActive();
-      btn.classList.toggle('on', on);
-      btn.textContent = on ? '📱 Movimiento: encendido' : '📱 Movimiento: apagado';
+      $('btn-movimiento').classList.toggle('on', !!(viewer && viewer.isOrientationActive()));
     }
 
-    function marcarHabitacion(id) {
-      document.querySelectorAll('.chip').forEach(c =>
-        c.classList.toggle('activa', c.dataset.id === id));
+    function marcarChip(id) {
+      document.querySelectorAll('.chip').forEach(c => {
+        const activa = c.dataset.id === id;
+        c.classList.toggle('activa', activa);
+        if (activa) c.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+      });
+    }
+
+    // ---------- 6) Modo editor ----------
+    function iniciarEditor() {
+      $('editor').style.display = 'block';
+      pintarEditor();
+
+      // Distinguir un "toque" de un "arrastre": solo marcamos si casi no se movió
+      const pano = $('panorama');
+      let inicio = null;
+      pano.addEventListener('pointerdown', e => { inicio = [e.clientX, e.clientY]; }, true);
+      pano.addEventListener('pointerup', e => {
+        if (!inicio) return;
+        const movido = Math.hypot(e.clientX - inicio[0], e.clientY - inicio[1]);
+        inicio = null;
+        if (movido > 6) return;
+        if (e.target.closest('.pnlm-hotspot-base')) return;
+        const [pitch, yaw] = viewer.mouseEventToCoords(e);
+        marcarPunto(+pitch.toFixed(1), +yaw.toFixed(1));
+      }, true);
+
+      $('ed-cancelar').onclick = quitarPuntoTemporal;
+      $('ed-agregar').onclick = agregarFlecha;
+      $('ed-vista').onclick = () => {
+        const h = habitacion(escenaActual);
+        h.yawInicial = Math.round(viewer.getYaw());
+        h.pitchInicial = Math.round(viewer.getPitch());
+        aviso('Vista inicial de ' + h.nombre + ' guardada');
+      };
+      $('ed-copiar').onclick = async () => {
+        try { await navigator.clipboard.writeText(exportarJSON()); aviso('JSON copiado'); }
+        catch (e) { aviso('No se pudo copiar. Usa Descargar.'); }
+      };
+      $('ed-descargar').onclick = () => {
+        const blob = new Blob([exportarJSON()], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'tour.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+    }
+
+    function marcarPunto(pitch, yaw) {
+      quitarPuntoTemporal();
+      puntoTemporal = { pitch, yaw };
+      viewer.addHotSpot({ id: '__temporal', type: 'info', pitch, yaw, cssClass: 'hs-temporal' }, escenaActual);
+
+      const sel = $('ed-destino');
+      sel.innerHTML = '';
+      tour.habitaciones.filter(h => h.id !== escenaActual).forEach(h => {
+        const o = document.createElement('option');
+        o.value = h.id;
+        o.textContent = h.nombre;
+        sel.appendChild(o);
+      });
+      $('ed-nuevo').hidden = false;
+    }
+
+    function quitarPuntoTemporal() {
+      if (puntoTemporal) { viewer.removeHotSpot('__temporal', escenaActual); puntoTemporal = null; }
+      $('ed-nuevo').hidden = true;
+    }
+
+    function agregarFlecha() {
+      if (!puntoTemporal) return;
+      const c = { destino: $('ed-destino').value, pitch: puntoTemporal.pitch, yaw: puntoTemporal.yaw };
+      quitarPuntoTemporal();
+      habitacion(escenaActual).conexiones.push(c);
+      viewer.addHotSpot(crearHotspot(c), escenaActual);
+      pintarEditor();
+      aviso('Flecha a ' + nombreDe(c.destino) + ' agregada');
+    }
+
+    function borrarFlecha(c) {
+      const h = habitacion(escenaActual);
+      viewer.removeHotSpot(c._hsId, escenaActual);
+      h.conexiones.splice(h.conexiones.indexOf(c), 1);
+      pintarEditor();
+    }
+
+    function pintarEditor() {
+      $('ed-hab').textContent = nombreDe(escenaActual);
+      const lista = $('ed-lista');
+      lista.innerHTML = '';
+      const conexiones = habitacion(escenaActual).conexiones;
+      if (!conexiones.length) {
+        lista.innerHTML = '<li class="vacio">Todavía no hay flechas aquí.</li>';
+        return;
+      }
+      conexiones.forEach(c => {
+        const li = document.createElement('li');
+        const info = document.createElement('span');
+        info.innerHTML = '→ <b></b> <small></small>';
+        info.querySelector('b').textContent = nombreDe(c.destino);
+        info.querySelector('small').textContent = '(' + c.pitch + ', ' + c.yaw + ')';
+        const del = document.createElement('button');
+        del.textContent = '✕';
+        del.title = 'Quitar flecha';
+        del.onclick = () => borrarFlecha(c);
+        li.append(info, del);
+        lista.appendChild(li);
+      });
+    }
+
+    function exportarJSON() {
+      return JSON.stringify(tour, (k, v) => k === '_hsId' ? undefined : v, 2);
     }
   </script>
 </body>
