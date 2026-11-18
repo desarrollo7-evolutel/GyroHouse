@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Recorrido virtual 360°</title>
+
+  <!-- Pannellum: visor 360 ligero, sin dependencias -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+  <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; overflow: hidden;
+                 font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #panorama { position: fixed; inset: 0; }
+
+    /* Ocultamos el botón de orientación de Pannellum: usamos el nuestro */
+    .pnlm-orientation-button { display: none !important; }
+
+    /* Pantalla de inicio (necesaria para pedir permiso de movimiento en iPhone) */
+    #inicio { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+              align-items: center; justify-content: center; gap: 16px; padding: 24px;
+              background: radial-gradient(circle at center, #1f2a38, #0b0f14); color: #fff; text-align: center; }
+    #inicio h1 { margin: 0; font-size: 22px; }
+    #inicio p  { margin: 0; opacity: .75; font-size: 14px; max-width: 320px; }
+    .btn { border: 0; border-radius: 999px; padding: 14px 26px; font-size: 16px; font-weight: 600;
+           background: #2f80ed; color: #fff; cursor: pointer; }
+    .btn:active { transform: scale(.97); }
+
+    /* Barra inferior: habitaciones + botón de movimiento */
+    #barra { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 12px;
+             display: none; flex-direction: column; gap: 10px; align-items: center;
+             background: linear-gradient(transparent, rgba(0,0,0,.65)); }
+    #habitaciones { display: flex; gap: 8px; overflow-x: auto; max-width: 100%; padding-bottom: 2px; }
+    .chip { flex: 0 0 auto; border: 1px solid rgba(255,255,255,.5); background: rgba(0,0,0,.35);
+            color: #fff; border-radius: 999px; padding: 8px 14px; font-size: 14px; cursor: pointer; }
+    .chip.activa { background: #fff; color: #111; border-color: #fff; }
+    #btn-movimiento { padding: 10px 18px; font-size: 14px; background: rgba(255,255,255,.15);
+                      border: 1px solid rgba(255,255,255,.5); }
+    #btn-movimiento.on { background: #27ae60; border-color: #27ae60; }
+
+    #aviso { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 30;
+             background: rgba(0,0,0,.8); color: #fff; padding: 10px 16px; border-radius: 10px;
+             font-size: 14px; display: none; max-width: 90%; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="panorama"></div>
+
+  <div id="inicio">
+    <h1 id="inicio-titulo">Recorrido virtual</h1>
+    <p>Mueve tu celular para mirar alrededor. Toca las flechas para pasar de una habitación a otra.</p>
+    <button class="btn" id="btn-entrar">Entrar al recorrido</button>
+  </div>
+
+  <div id="barra">
+    <div id="habitaciones"></div>
+    <button class="btn" id="btn-movimiento">📱 Movimiento: apagado</button>
+  </div>
+
+  <div id="aviso"></div>
+
+  <script>
+    // ---------------------------------------------------------------
+    // Configuración: el tour se lee de un JSON.
+    //   index.html?tour=tour.json   (por defecto)
+    //   index.html?tour=https://api.inmobiliaria.com/tours/123.json
+    //   Agrega &debug para ver pitch/yaw en la consola al tocar la imagen
+    //   (sirve para colocar las flechas).
+    // ---------------------------------------------------------------
+    const params   = new URLSearchParams(location.search);
+    const tourUrl  = params.get('tour') || 'tour.json';
+    const modoDebug = params.has('debug');
+
+    const esMovil = window.matchMedia('(pointer: coarse)').matches;
+    const necesitaPermisoIOS = typeof DeviceOrientationEvent !== 'undefined'
+                            && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+    let tour = null;
+    let viewer = null;
+    let movimientoPermitido = false;
+
+    const $ = id => document.getElementById(id);
+
+    function aviso(texto, ms = 3500) {
+      const el = $('aviso');
+      el.textContent = texto;
+      el.style.display = 'block';
+      clearTimeout(aviso._t);
+      aviso._t = setTimeout(() => el.style.display = 'none', ms);
+    }
+
+    // 1) Cargar el JSON del tour
+    fetch(tourUrl)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(datos => {
+        tour = datos;
+        $('inicio-titulo').textContent = tour.propiedad || 'Recorrido virtual';
+      })
+      .catch(err => {
+        $('btn-entrar').disabled = true;
+        $('btn-entrar').textContent = 'No se pudo cargar el recorrido';
+        console.error('Error cargando tour:', err);
+      });
+
+    // 2) Al tocar "Entrar": pedir permiso (iPhone) y crear el visor.
+    //    El permiso de iOS SOLO se puede pedir dentro de un toque del usuario.
+    $('btn-entrar').addEventListener('click', async () => {
+      if (!tour) return;
+
+      if (esMovil) {
+        if (!window.isSecureContext) {
+          aviso('El movimiento del celular requiere HTTPS. Puedes arrastrar con el dedo.', 5000);
+        } else if (necesitaPermisoIOS) {
+          try {
+            const r = await DeviceOrientationEvent.requestPermission();
+            movimientoPermitido = (r === 'granted');
+            if (!movimientoPermitido) aviso('Sin permiso de movimiento. Puedes arrastrar con el dedo.');
+          } catch (e) {
+            aviso('No se pudo pedir el permiso de movimiento.');
+          }
+        } else {
+          movimientoPermitido = true; // Android: no pide permiso
+        }
+      }
+
+      $('inicio').style.display = 'none';
+      crearVisor();
+    });
+
+    // 3) Construir el visor a partir del JSON
+    function crearVisor() {
+      const nombres = Object.fromEntries(tour.habitaciones.map(h => [h.id, h.nombre]));
+      const scenes = {};
+
+      for (const h of tour.habitaciones) {
+        scenes[h.id] = {
+          title: h.nombre,
+          type: 'equirectangular',
+          panorama: h.imagen,
+          yaw: h.yawInicial || 0,
+          pitch: 0,
+          hfov: 100,
+          hotSpots: (h.conexiones || []).map(c => ({
+            type: 'scene',
+            sceneId: c.destino,
+            text: c.texto || ('Ir a ' + (nombres[c.destino] || c.destino)),
+            pitch: c.pitch ?? -10,
+            yaw: c.yaw ?? 0
+          }))
+        };
+      }
+
+      viewer = pannellum.viewer('panorama', {
+        default: {
+          firstScene: tour.inicio || tour.habitaciones[0].id,
+          sceneFadeDuration: 800,
+          autoLoad: true,
+          showZoomCtrl: !esMovil,
+          compass: false,
+          orientationOnByDefault: esMovil && movimientoPermitido,
+          hotSpotDebug: modoDebug
+        },
+        scenes,
+        strings: {
+          loadButtonLabel: 'Toca para cargar',
+          loadingLabel: 'Cargando...',
+          bylineLabel: 'por %s',
+          noPanoramaError: 'No se especificó imagen.',
+          fileAccessError: 'No se pudo acceder a %s.',
+          malformedURLError: 'La URL de la imagen es incorrecta.',
+          genericWebGLError: 'Tu navegador no soporta WebGL.',
+          textureSizeError: 'La imagen es muy grande para este dispositivo (máx. %s px de ancho). Usa 4096×2048.',
+          unknownError: 'Error desconocido.'
+        }
+      });
+
+      viewer.on('scenechange', marcarHabitacion);
+      viewer.on('error', msg => aviso(msg, 6000));
+
+      pintarBarra();
+      marcarHabitacion(tour.inicio || tour.habitaciones[0].id);
+      $('barra').style.display = 'flex';
+    }
+
+    // 4) Barra inferior
+    function pintarBarra() {
+      const cont = $('habitaciones');
+      cont.innerHTML = '';
+      for (const h of tour.habitaciones) {
+        const b = document.createElement('button');
+        b.className = 'chip';
+        b.dataset.id = h.id;
+        b.textContent = h.nombre;
+        b.onclick = () => viewer.loadScene(h.id);
+        cont.appendChild(b);
+      }
+
+      const btn = $('btn-movimiento');
+      if (!esMovil || !movimientoPermitido) { btn.style.display = 'none'; return; }
+
+      // El estado real se revisa un momento después de cargar
+      setTimeout(actualizarBotonMovimiento, 1500);
+      btn.onclick = () => {
+        if (viewer.isOrientationActive()) viewer.stopOrientation();
+        else viewer.startOrientation();
+        setTimeout(actualizarBotonMovimiento, 300);
+      };
+    }
+
+    function actualizarBotonMovimiento() {
+      const btn = $('btn-movimiento');
+      const on = viewer && viewer.isOrientationActive();
+      btn.classList.toggle('on', on);
+      btn.textContent = on ? '📱 Movimiento: encendido' : '📱 Movimiento: apagado';
+    }
+
+    function marcarHabitacion(id) {
+      document.querySelectorAll('.chip').forEach(c =>
+        c.classList.toggle('activa', c.dataset.id === id));
+    }
+  </script>
+</body>
+</html>
