@@ -180,6 +180,7 @@
     let tour = null;
     let viewer = null;
     let movimientoPermitido = false;
+    let movimientoOn = false;   // estado que ELIGE el usuario; nosotros lo hacemos respetar
     let escenaActual = null;
     let puntoTemporal = null;
     let contadorHs = 0;
@@ -197,7 +198,8 @@
     }
 
     // ---------- 1) Cargar el tour ----------
-    fetch(tourUrl)
+    // cache: 'no-store' → siempre trae el tour.json más reciente (sin caché del celular)
+    fetch(tourUrl, { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(datos => {
         tour = datos;
@@ -272,7 +274,9 @@
           autoLoad: true,
           showControls: false,
           compass: false,
-          orientationOnByDefault: esMovil && movimientoPermitido && !modoEditor
+          // Lo controlamos nosotros: si se deja en true, Pannellum lo vuelve
+          // a encender en cada cambio de espacio aunque el usuario lo apagó.
+          orientationOnByDefault: false
         },
         scenes,
         strings: {
@@ -294,6 +298,8 @@
         if (modoEditor) { quitarPuntoTemporal(); pintarEditor(); }
       });
       viewer.on('error', msg => aviso(msg, 6000));
+      // Cada vez que termina de cargar un espacio, reaplicamos lo que eligió el usuario
+      viewer.on('load', aplicarMovimiento);
 
       pintarDock();
       marcarChip(escenaActual);
@@ -326,16 +332,43 @@
         $('sep-mov').style.display = 'none';
         return;
       }
-      setTimeout(actualizarBotonMovimiento, 1500);
+      // Arranca encendido si dio permiso
+      movimientoOn = true;
+      actualizarBotonMovimiento();
+
+      // El botón cambia AL INSTANTE (antes esperaba a Pannellum y parecía atorado)
       btn.onclick = () => {
-        if (viewer.isOrientationActive()) viewer.stopOrientation();
-        else viewer.startOrientation();
-        setTimeout(actualizarBotonMovimiento, 300);
+        movimientoOn = !movimientoOn;
+        actualizarBotonMovimiento();
+        aplicarMovimiento();
       };
+
+      // Pannellum apaga el giroscopio cuando tocas la pantalla.
+      // - Si fue un toque simple (o en una flecha): lo dejamos como estaba.
+      // - Si el usuario ARRASTRÓ para girar: entendemos que quiere control manual → lo apagamos.
+      const pano = $('panorama');
+      let ini = null;
+      pano.addEventListener('pointerdown', e => { ini = [e.clientX, e.clientY]; }, true);
+      pano.addEventListener('pointerup', e => {
+        if (!ini) return;
+        const movido = Math.hypot(e.clientX - ini[0], e.clientY - ini[1]);
+        ini = null;
+        if (movido > 10 && movimientoOn && !e.target.closest('.pnlm-hotspot-base')) {
+          movimientoOn = false;
+          actualizarBotonMovimiento();
+        }
+        setTimeout(aplicarMovimiento, 50);
+      }, true);
+    }
+
+    function aplicarMovimiento() {
+      if (!viewer || !movimientoPermitido || modoEditor) return;
+      if (movimientoOn && !viewer.isOrientationActive()) viewer.startOrientation();
+      if (!movimientoOn && viewer.isOrientationActive()) viewer.stopOrientation();
     }
 
     function actualizarBotonMovimiento() {
-      $('btn-movimiento').classList.toggle('on', !!(viewer && viewer.isOrientationActive()));
+      $('btn-movimiento').classList.toggle('on', movimientoOn);
     }
 
     function marcarChip(id) {
