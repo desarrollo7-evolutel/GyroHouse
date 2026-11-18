@@ -6,27 +6,27 @@
       "id": "sala",
       "nombre": "Sala",
       "imagen": "img/sala.jpg",
-      "yawInicial": 0,
+      "yawInicial": -95,
       "conexiones": [
-        { "destino": "bano",     "pitch": -10, "yaw": 90 },
-        { "destino": "recamara", "pitch": -10, "yaw": -90 }
-      ]
+        {
+          "destino": "bano",
+          "pitch": -10,
+          "yaw": 90
+        }
+      ],
+      "pitchInicial": -8
     },
     {
       "id": "bano",
       "nombre": "Baño",
       "imagen": "img/bano.jpg",
-      "conexiones": [
-        { "destino": "sala", "pitch": -10, "yaw": 180, "texto": "Regresar a la sala" }
-      ]
+      "conexiones": []
     },
     {
       "id": "recamara",
       "nombre": "Recámara",
       "imagen": "img/recamara.jpg",
-      "conexiones": [
-        { "destino": "sala", "pitch": -10, "yaw": 180, "texto": "Regresar a la sala" }
-      ]
+      "conexiones": []
     }
   ]
 }
