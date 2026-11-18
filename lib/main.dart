@@ -11,7 +11,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 // Cambia por la URL HTTPS donde publiques la carpeta tour-demo
 // (GitHub Pages, Netlify, el servidor de la inmobiliaria, etc.)
-const String tourUrl = 'https://TU-USUARIO.github.io/tour-demo/index.html';
+const String tourUrl = 'https://desarrollo7-evolutel.github.io/GyroHouse/';
 
 void main() {
   runApp(
