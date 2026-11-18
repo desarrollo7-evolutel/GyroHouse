@@ -8,14 +8,14 @@
       "imagen": "img/sala.jpg",
       "yawInicial": 0,
       "conexiones": [
-        { "destino": "cocina",   "pitch": -10, "yaw": 90 },
+        { "destino": "bano",     "pitch": -10, "yaw": 90 },
         { "destino": "recamara", "pitch": -10, "yaw": -90 }
       ]
     },
     {
-      "id": "cocina",
-      "nombre": "Cocina",
-      "imagen": "img/cocina.jpg",
+      "id": "bano",
+      "nombre": "Baño",
+      "imagen": "img/bano.jpg",
       "conexiones": [
         { "destino": "sala", "pitch": -10, "yaw": 180, "texto": "Regresar a la sala" }
       ]
