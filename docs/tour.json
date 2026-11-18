@@ -6,15 +6,15 @@
       "id": "sala",
       "nombre": "Sala",
       "imagen": "img/sala.jpg",
-      "yawInicial": 71,
+      "yawInicial": -200,
       "conexiones": [
         {
           "destino": "recamara",
-          "pitch": -1.3,
-          "yaw": -108.6
+          "pitch": 0.2,
+          "yaw": -136.9
         }
       ],
-      "pitchInicial": 2
+      "pitchInicial": -8
     },
     {
       "id": "bano",
@@ -22,13 +22,13 @@
       "imagen": "img/bano.jpg",
       "conexiones": [
         {
-          "destino": "sala",
-          "pitch": 1.4,
-          "yaw": 88.1
+          "destino": "recamara",
+          "pitch": -13.7,
+          "yaw": 22.6
         }
       ],
-      "yawInicial": -27,
-      "pitchInicial": -14
+      "yawInicial": -150,
+      "pitchInicial": -9
     },
     {
       "id": "recamara",
